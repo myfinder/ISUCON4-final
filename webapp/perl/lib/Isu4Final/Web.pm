@@ -6,6 +6,17 @@ use utf8;
 use Kossy;
 use Redis;
 use Fcntl ':flock';
+use File::Slurp;
+use Sys::Hostname;
+
+my $config = {
+    assets_dir  => '/var/tmp/isucon4/assets',
+    map_host2ip => {
+        isu18a => '203.104.111.152',
+        isu18b => '203.104.111.153',
+        isu18c => '203.104.111.154',
+    },
+};
 
 sub ads_dir {
     my $self = shift;
@@ -29,6 +40,13 @@ sub log_path {
 sub advertiser_id {
     my ( $self, $c ) = @_;
     return $c->req->header('X-Advertiser-Id');
+}
+
+sub assets_dir {
+    my $self = shift;
+    my $dir = $config->{assets_dir};
+    mkdir $dir unless -d $dir;
+    return $dir;
 }
 
 my $redis;
@@ -150,6 +168,11 @@ post '/slots/{slot:[^/]+}/ads' => sub {
     my $id  = $self->next_ad_id;
     my $key = $self->ad_key($slot, $id);
 
+#   my $asset_host = $config->{map_host2ip}{(hostname)};
+    my $asset_host = '127.0.0.1';
+    my $asset_key  = $self->asset_key($slot, $id);
+    my $asset_url  = sprintf 'http://%s/assets/%s', $asset_host, $asset_key;
+
     $self->redis->hmset(
         $key,
         'slot'        => $slot,
@@ -159,14 +182,13 @@ post '/slots/{slot:[^/]+}/ads' => sub {
         'advertiser'  => $advertiser_id,
         'destination' => $c->req->param('destination'),
         'impressions' => 0,
+        'asset_url'   => $asset_url,
     );
 
-    open my $in, $asset->path or do {
-        $c->halt(500);
-    };
-    my $content = do { local $/; <$in> };
-    close $in;
-    $self->redis->set($self->asset_key($slot, $id), $content);
+    open my $in, $asset->path or $c->halt(500);
+
+    write_file $self->assets_dir . "/$asset_key", { binmode => ':raw' }, \$in;
+
     $self->redis->rpush($self->slot_key($slot), $id);
     $self->redis->sadd($self->advertiser_key($advertiser_id), $key);
 
@@ -218,43 +240,8 @@ get '/slots/{slot:[^/]+}/ads/{id:[0-9]+}/asset' => sub {
 
     if ( $ad ) {
         $c->res->content_type($ad->{type} || 'video/mp4');
-        my $data = $self->redis->get($self->asset_key($slot, $id));
-
-
-        my $range = $c->req->header('Range');
-        if ( !$range ) {
-            $c->res->header('Content-Length' => length($data));
-            $c->res->body($data);
-            return $c->res;
-        }
-        elsif ( $range =~ /\Abytes=(\d+)?-(\d+)?\z/ )  {
-            my ( $head, $tail ) = ( $1, $2 );
-
-            if ( !defined($head) && !defined($tail) ) {
-                $c->halt(416);
-            }
-            my $length = length($data);
-
-            $head ||= 0;
-            $tail ||= $length - 1;
-
-            if ( $head < 0 || $head >= $length || $tail < 0 ) {
-                $c->halt(416);
-            }
-
-            my $partial_body = substr($data, $head, $tail - $head + 1);
-
-            $c->res->status(206);
-            $c->res->header('Content-Range' => "bytes ${head}-${tail}/${length}", 'Content-Length' => length($partial_body));
-
-            $c->res->body($partial_body);
-            return $c->res;
-
-        }
-        else {
-            $c->halt(416);
-        }
-
+        $c->res->header('X-Reproxy-URL' => $ad->{asset_url});
+        return $c->res;
     }
     else {
         $c->res->status(404);
@@ -401,6 +388,10 @@ post '/initialize' => sub {
     }
 
     for my $file ( glob($self->log_dir . '/*') ) {
+        unlink $file;
+    }
+
+    for my $file ( glob($self->assets_dir . '/*') ) {
         unlink $file;
     }
 
