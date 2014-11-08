@@ -19,6 +19,7 @@ my $config = {
         isu18b => '10.11.54.153',
         isu18c => '10.11.54.154',
     },
+    redis_server => '10.11.54.152:6379',
 };
 
 sub ads_dir {
@@ -49,7 +50,7 @@ sub assets_dir {
 
 my $redis;
 sub redis {
-    $redis ||= Redis->new(server => '10.11.54.152:6379');
+    $redis ||= Redis->new(server => $config->{redis_server});
     return $redis;
 }
 
