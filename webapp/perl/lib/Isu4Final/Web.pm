@@ -8,6 +8,7 @@ use Redis::Jet;
 use File::Slurp;
 use Sys::Hostname;
 use HTTP::Tiny;
+use File::Copy;
 
 my $config = {
     assets_dir  => '/var/tmp/isucon4/assets',
@@ -178,12 +179,9 @@ post '/slots/{slot:[^/]+}/ads' => sub {
         'asset_url'   => $asset_url,
     );
 
-    open my $in, $asset->path or $c->halt(500);
+    my $asset_file = $self->assets_dir . "/$asset_key";
 
-    my $content = do { local $/; <$in> };
-    close $in;
-
-    write_file $self->assets_dir . "/$asset_key", { binmode => ':raw' }, $content;
+    copy($asset->path, $asset_file) or $c->halt(500);
 
     $self->redis->command('rpush', $self->slot_key($slot), $id);
     $self->redis->command('sadd', $self->advertiser_key($advertiser_id), $key);
