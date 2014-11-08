@@ -353,9 +353,9 @@ get '/me/final_report' => sub {
 post '/initialize' => sub {
     my ($self, $c) = @_;
 
-    my @keys = $self->redis->command('keys', 'isu4:*');
+    my $keys = $self->redis->command('keys', 'isu4:*');
 
-    for my $key ( @keys ) {
+    for my $key ( @$keys ) {
         $self->redis->command('del', $key);
     }
 
