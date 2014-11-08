@@ -168,8 +168,7 @@ post '/slots/{slot:[^/]+}/ads' => sub {
     my $id  = $self->next_ad_id;
     my $key = $self->ad_key($slot, $id);
 
-#   my $asset_host = $config->{map_host2ip}{(hostname)};
-    my $asset_host = '127.0.0.1';
+    my $asset_host = $config->{map_host2ip}{(hostname)};
     my $asset_key  = $self->asset_key($slot, $id);
     my $asset_url  = sprintf 'http://%s/assets/%s', $asset_host, $asset_key;
 
@@ -187,7 +186,10 @@ post '/slots/{slot:[^/]+}/ads' => sub {
 
     open my $in, $asset->path or $c->halt(500);
 
-    write_file $self->assets_dir . "/$asset_key", { binmode => ':raw' }, \$in;
+    my $content = do { local $/; <$in> };
+    close $in;
+
+    write_file $self->assets_dir . "/$asset_key", { binmode => ':raw' }, $content;
 
     $self->redis->rpush($self->slot_key($slot), $id);
     $self->redis->sadd($self->advertiser_key($advertiser_id), $key);
