@@ -53,6 +53,11 @@ sub redis {
     $redis ||= Redis::Jet->new(server => $config->{redis_server});
     return $redis;
 }
+my $redis_nr;
+sub redis_nr {
+    $redis_nr ||= Redis->new(server => $config->{redis_server}, noreply => 1);
+    return $redis_nr;
+}
 
 sub ad_key {
     my ( $self, $slot, $id ) = @_;
@@ -76,7 +81,7 @@ sub slot_key {
 
 sub next_ad_id {
     my $self = shift;
-    $self->redis->command('incr', 'isu4:ad-next');
+    $self->redis_nr->command('incr', 'isu4:ad-next');
 }
 
 sub next_ad {
@@ -94,7 +99,7 @@ sub next_ad {
         return $ad;
     }
     else {
-        $self->redis->command('lrem', $key, 0, $id);
+        $self->redis_nr->command('lrem', $key, 0, $id);
         $self->next_ad($c);
     }
 }
@@ -165,7 +170,7 @@ post '/slots/{slot:[^/]+}/ads' => sub {
     my $asset_key  = $self->asset_key($slot, $id);
     my $asset_url  = sprintf 'http://%s/assets/%s', $asset_host, $asset_key;
 
-    $self->redis->command('hmset',
+    $self->redis_nr->command('hmset',
         $key,
         'slot'        => $slot,
         'id'          => $id,
@@ -185,8 +190,8 @@ post '/slots/{slot:[^/]+}/ads' => sub {
 
     write_file $self->assets_dir . "/$asset_key", { binmode => ':raw' }, $content;
 
-    $self->redis->command('rpush', $self->slot_key($slot), $id);
-    $self->redis->command('sadd', $self->advertiser_key($advertiser_id), $key);
+    $self->redis_nr->command('rpush', $self->slot_key($slot), $id);
+    $self->redis_nr->command('sadd', $self->advertiser_key($advertiser_id), $key);
 
     $c->render_json($self->get_ad($c, $slot, $id));
 };
@@ -263,7 +268,7 @@ post '/slots/{slot:[^/]+}/ads/{id:[0-9]+}/count' => sub {
         return $c->res;
     }
 
-    $self->redis->command('hincrby', $key, 'impressions', 1);
+    $self->redis_nr->command('hincrby', $key, 'impressions', 1);
 
     $c->res->status(204);
     return $c->res;
@@ -285,13 +290,13 @@ get '/slots/{slot:[^/]+}/ads/{id:[0-9]+}/redirect' => sub {
         return $c->res;
     }
 
-    $self->redis->command('hincrby', $key, 'clicks', 1);
-    $self->redis->command('hincrby', "$key:agent", $c->req->env->{'HTTP_USER_AGENT'} || 'unknown', 1);
+    $self->redis_nr->command('hincrby', $key, 'clicks', 1);
+    $self->redis_nr->command('hincrby', "$key:agent", $c->req->env->{'HTTP_USER_AGENT'} || 'unknown', 1);
     my $user = $self->decode_user_key($c->req->cookies->{isuad});
-    $self->redis->command('hincrby', "$key:gender", $user->{gender} || 'unknown', 1);
+    $self->redis_nr->command('hincrby', "$key:gender", $user->{gender} || 'unknown', 1);
     my $generation = 'unknown';
     $generation = int($user->{age}/10) if $user->{age};
-    $self->redis->command('hincrby', "$key:generation", $generation, 1);
+    $self->redis_nr->command('hincrby', "$key:generation", $generation, 1);
 
     $c->redirect($ad->{destination});
 };
@@ -358,7 +363,7 @@ post '/initialize' => sub {
     my $keys = $self->redis->command('keys', 'isu4:*');
 
     for my $key ( @$keys ) {
-        $self->redis->command('del', $key);
+        $self->redis_nr->command('del', $key);
     }
 
     for my $file ( glob($self->log_dir . '/*') ) {
