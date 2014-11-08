@@ -10,3 +10,5 @@ sample_creatives
 .lesshst
 redis/appendonly.aof
 redis/dump.rdb
+.cpanm
+webapp/perl/logs
