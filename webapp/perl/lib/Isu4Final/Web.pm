@@ -12,12 +12,9 @@ use HTTP::Tiny;
 my $config = {
     assets_dir  => '/var/tmp/isucon4/assets',
     map_host2ip => {
-#        isu18a => '203.104.111.152',
-#        isu18b => '203.104.111.153',
-#        isu18c => '203.104.111.154',
-        isu18a => '10.11.54.152',
-        isu18b => '10.11.54.153',
-        isu18c => '10.11.54.154',
+        isu18a => '10.11.54.152', # '203.104.111.152',
+        isu18b => '10.11.54.153', # '203.104.111.153',
+        isu18c => '10.11.54.154', # '203.104.111.154',
     },
     redis_server => '10.11.54.152:6379',
 };
@@ -57,6 +54,11 @@ sub redis {
 sub ad_key {
     my ( $self, $slot, $id ) = @_;
     return "isu4:ad:${slot}-${id}";
+}
+
+sub impression_key {
+    my ( $self, $slot, $id ) = @_;
+    return "isu4:imp:${slot}-${id}";
 }
 
 sub asset_key {
@@ -99,14 +101,40 @@ sub next_ad {
     }
 }
 
+my %ads;
+
+sub get_imp {
+    my ( $self, $slot, $id ) = @_;
+    my $key = $self->impression_key($slot, $id);
+    $self->redis->get($key) // 0;
+}
+
+sub incr_imp {
+    my ( $self, $slot, $id ) = @_;
+    my $key = $self->impression_key($slot, $id);
+    $self->redis->incr($key);
+}
+
 sub get_ad {
     my ( $self, $c, $slot, $id ) = @_;
+    my $ad = $self->_get_ad($c, $slot, $id);
+    return undef unless $ad;
+    $ad->{impressions} = $self->get_imp($slot, $id);
+    return $ad;
+}
+
+sub _get_ad {
+    my ( $self, $c, $slot, $id ) = @_;
     my $key = $self->ad_key($slot, $id);
-    my %ad  = $self->redis->hgetall($key);
+
+    if (my $ad = %ads{$key}) {
+        return $ad;
+    }
+
+    my %ad = $self->redis->hgetall($key);
 
     return undef if !%ad;
 
-    $ad{impressions} = int($ad{impressions});
     $ad{asset}       = $c->req->uri_for("/slots/${slot}/ads/${id}/asset")->as_string;
     $ad{counter}     = $c->req->uri_for("/slots/${slot}/ads/${id}/count")->as_string;
     $ad{redirect}    = $c->req->uri_for("/slots/${slot}/ads/${id}/redirect")->as_string;
@@ -168,7 +196,7 @@ post '/slots/{slot:[^/]+}/ads' => sub {
         'type'        => $c->req->param('type') || $asset->content_type || 'video/mp4',
         'advertiser'  => $advertiser_id,
         'destination' => $c->req->param('destination'),
-        'impressions' => 0,
+#       'impressions' => 0,
         'clicks'      => 0,
         'asset_url'   => $asset_url,
     );
@@ -258,7 +286,8 @@ post '/slots/{slot:[^/]+}/ads/{id:[0-9]+}/count' => sub {
         return $c->res;
     }
 
-    $self->redis->hincrby($key, 'impressions', 1);
+#   $self->redis->hincrby($key, 'impressions', 1);
+    $self->incr_imp($slot, $id);
 
     $c->res->status(204);
     return $c->res;
@@ -306,7 +335,8 @@ get '/me/report' => sub {
     for my $ad_key ( @$ad_keys ) {
         my %ad = $self->redis->hgetall($ad_key);
         next unless %ad;
-        $ad{impressions} = int($ad{impressions});
+#       $ad{impressions} = int($ad{impressions});
+        $ad{impressions} = $self->get_imp($ad{slot}, $ad{id});
         my $clicks = int(delete $ad{clicks});
         $report->{$ad{id}} = { ad => \%ad, clicks => $clicks, impressions => $ad{'impressions'} };
     }
@@ -328,7 +358,8 @@ get '/me/final_report' => sub {
     for my $ad_key ( @$ad_keys ) {
         my %ad = $self->redis->hgetall($ad_key);
         next unless %ad;
-        $ad{impressions} = int($ad{impressions});
+#       $ad{impressions} = int($ad{impressions});
+        $ad{impressions} = $self->get_imp($ad{slot}, $ad{id});
         my $clicks = int(delete $ad{clicks});
         $reports->{$ad{id}} = { ad => \%ad, clicks => $clicks, impressions => int($ad{'impressions'}) };
         $reports->{$ad{id}}->{breakdown} = {
