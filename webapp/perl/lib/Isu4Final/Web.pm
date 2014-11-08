@@ -7,6 +7,7 @@ use Kossy;
 use Redis;
 use File::Slurp;
 use Sys::Hostname;
+use HTTP::Tiny;
 
 my $config = {
     assets_dir  => '/var/tmp/isucon4/assets',
@@ -351,6 +352,12 @@ post '/initialize' => sub {
 
     for my $file ( glob($self->assets_dir . '/*') ) {
         unlink $file;
+    }
+
+    my $self_host = hostname;
+    for my $host (grep { $self_host ne $_ } keys %{$config->{map_host2ip}}) {
+        my $url = 'http://' . $config->{map_host2ip}{$host} . '/initialize';
+        HTTP::Tiny->new->get($host);
     }
 
     $c->res->content_type('text/plain');
