@@ -5,3 +5,6 @@ sample_creatives
 .xbuild
 .ssh
 *.swp
+.gem
+.vim
+.lesshst
