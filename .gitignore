@@ -1,0 +1,6 @@
+sample_creatives
+.bash_*
+.viminfo
+.local
+.xbuild
+.ssh

@@ -1,0 +1,15 @@
+[user]
+    name = 50ms or die.
+    email = tech@fout.jp
+
+[gc]
+    auto = 1
+
+[color]
+    ui = auto
+
+[alias]
+    co = checkout
+    ci = commit
+    st = status
+    br = branch
