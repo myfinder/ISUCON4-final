@@ -242,6 +242,7 @@ get '/slots/{slot:[^/]+}/ads/{id:[0-9]+}/asset' => sub {
 
     if ( $ad ) {
         $c->res->content_type($ad->{type} || 'video/mp4');
+        $c->res->header('X-Accel-Redirect' => '/reproxy');
         $c->res->header('X-Reproxy-URL' => $ad->{asset_url});
         return $c->res;
     }
