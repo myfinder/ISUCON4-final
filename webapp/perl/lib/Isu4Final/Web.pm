@@ -102,8 +102,11 @@ sub next_ad {
 sub get_ad {
     my ( $self, $c, $slot, $id ) = @_;
     my $key = $self->ad_key($slot, $id);
-    my %ad  = @{$self->redis->command('hgetall', $key)};
+    my ($val, $err)  = $self->redis->command('hgetall', $key);
 
+    return undef if $err;
+
+    my %ad = @$val;
     return undef if !%ad;
 
     $ad{impressions} = int($ad{impressions});
@@ -122,8 +125,9 @@ sub decode_user_key {
 }
 
 sub value2int {
-    my $self = shift;
-    my %hash = @{shift};
+    my ($self, $val, $err) = @_;
+    return {} if $err;
+    my %hash = @$val;
 
     my $new_hash = {};
     while ( my ($key, $value) = each (%hash) ) {
@@ -305,7 +309,9 @@ get '/me/report' => sub {
 
     my $report = {};
     for my $ad_key ( @$ad_keys ) {
-        my %ad = @{$self->redis->command('hgetall', $ad_key)};
+        my ($val, $err) = $self->redis->command('hgetall', $ad_key);
+        next if $err;
+        my %ad = @$val;
         next unless %ad;
         $ad{impressions} = int($ad{impressions});
         my $clicks = int(delete $ad{clicks});
@@ -327,7 +333,9 @@ get '/me/final_report' => sub {
     my $reports = {};
     my $ad_keys = $self->redis->command('smembers', $self->advertiser_key($advertiser_id) );
     for my $ad_key ( @$ad_keys ) {
-        my %ad = @{$self->redis->command('hgetall', $ad_key)};
+        my ($val, $err) = $self->redis->command('hgetall', $ad_key);
+        next if $err;
+        my %ad = @$val;
         next unless %ad;
         $ad{impressions} = int($ad{impressions});
         my $clicks = int(delete $ad{clicks});
