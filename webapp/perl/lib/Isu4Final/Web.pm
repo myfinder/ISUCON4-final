@@ -5,7 +5,6 @@ use warnings;
 use utf8;
 use Kossy;
 use Redis;
-use Fcntl ':flock';
 
 sub ads_dir {
     my $self = shift;
@@ -19,11 +18,6 @@ sub log_dir {
     my $dir = $self->root_dir . '/logs';
     mkdir $dir unless -d $dir;
     return $dir;
-}
-
-sub log_path {
-    my ( $self, $id ) = @_;
-    return $self->log_dir . '/' . ( split '/', $id )[-1]
 }
 
 sub advertiser_id {
@@ -99,31 +93,20 @@ sub get_ad {
 
 sub decode_user_key {
     my ( $self, $id ) = @_;
+    return { gender => 'unknown', age => undef } unless $id;
     my ( $gender, $age ) = split '/', $id;
     return { gender => $gender eq '0' ? 'female' : $gender eq '1' ? 'male' : undef, age => int($age) };
 }
 
-sub get_log {
-    my ( $self, $id ) = @_;
+sub value2int {
+    my ($self, %hash) = @_;
 
-    my $result = {};
-    open my $in, '<', $self->log_path($id) or return {};
-    flock $in, LOCK_SH;
-    while ( my $line = <$in> ) {
-        chomp $line;
-        my ( $ad_id, $user, $agent ) = split "\t", $line;
-        $result->{$ad_id} = [] unless $result->{$ad_id};
-        my $user_attr = $self->decode_user_key($user);
-        push @{$result->{$ad_id}}, {
-            ad_id  => $ad_id,
-            user   => $user,
-            agent  => $agent,
-            age    => $user_attr->{age},
-            gender => $user_attr->{gender},
-        };
+    my $new_hash = {};
+    while ( my ($key, $value) = each (%hash) ) {
+        $new_hash->{$key} = int($value);
     }
-    close $in;
-    return $result;
+
+    return $new_hash;
 }
 
 get '/' => sub {
@@ -292,6 +275,7 @@ get '/slots/{slot:[^/]+}/ads/{id:[0-9]+}/redirect' => sub {
     my $slot = $c->args->{slot};
     my $id   = $c->args->{id};
 
+    my $key = $self->ad_key($slot, $id);
     my $ad = $self->get_ad($c, $slot, $id);
 
     unless ( $ad ) {
@@ -303,7 +287,7 @@ get '/slots/{slot:[^/]+}/ads/{id:[0-9]+}/redirect' => sub {
 
     $self->redis->hincrby($key, 'clicks', 1);
     $self->redis->hincrby("$key:agent", $c->req->env->{'HTTP_USER_AGENT'} || 'unknown', 1);
-    my $user = decode_user_key($c->req->cookies->{isuad});
+    my $user = $self->decode_user_key($c->req->cookies->{isuad});
     $self->redis->hincrby("$key:gender", $user->{gender} || 'unknown', 1);
     my $generation = 'unknown';
     $generation = int($user->{age}/10) if $user->{age};
@@ -353,9 +337,9 @@ get '/me/final_report' => sub {
         my $clicks = int(delete $ad{clicks});
         $reports->{$ad{id}} = { ad => \%ad, clicks => $clicks, impressions => int($ad{'impressions'}) };
         $reports->{$ad{id}}->{breakdown} = {
-            gender => { $self->redis->hgetall("$ad_key:gender") },
-            agents => { $self->redis->hgetall("$ad_key:agent") },
-            generations => { $self->redis->hgetall("$ad_key:generation") },
+            gender => $self->value2int($self->redis->hgetall("$ad_key:gender")),
+            agents => $self->value2int($self->redis->hgetall("$ad_key:agent")),
+            generations => $self->value2int($self->redis->hgetall("$ad_key:generation")),
         };
     }
 
