@@ -5,7 +5,6 @@ use warnings;
 use utf8;
 use Kossy;
 use Redis;
-use Fcntl ':flock';
 
 sub ads_dir {
     my $self = shift;
@@ -19,11 +18,6 @@ sub log_dir {
     my $dir = $self->root_dir . '/logs';
     mkdir $dir unless -d $dir;
     return $dir;
-}
-
-sub log_path {
-    my ( $self, $id ) = @_;
-    return $self->log_dir . '/' . ( split '/', $id )[-1]
 }
 
 sub advertiser_id {
@@ -99,31 +93,20 @@ sub get_ad {
 
 sub decode_user_key {
     my ( $self, $id ) = @_;
+    return { gender => 'unknown', age => undef } unless $id;
     my ( $gender, $age ) = split '/', $id;
     return { gender => $gender eq '0' ? 'female' : $gender eq '1' ? 'male' : undef, age => int($age) };
 }
 
-sub get_log {
-    my ( $self, $id ) = @_;
+sub value2int {
+    my ($self, %hash) = @_;
 
-    my $result = {};
-    open my $in, '<', $self->log_path($id) or return {};
-    flock $in, LOCK_SH;
-    while ( my $line = <$in> ) {
-        chomp $line;
-        my ( $ad_id, $user, $agent ) = split "\t", $line;
-        $result->{$ad_id} = [] unless $result->{$ad_id};
-        my $user_attr = $self->decode_user_key($user);
-        push @{$result->{$ad_id}}, {
-            ad_id  => $ad_id,
-            user   => $user,
-            agent  => $agent,
-            age    => $user_attr->{age},
-            gender => $user_attr->{gender},
-        };
+    my $new_hash = {};
+    while ( my ($key, $value) = each (%hash) ) {
+        $new_hash->{$key} = int($value);
     }
-    close $in;
-    return $result;
+
+    return $new_hash;
 }
 
 get '/' => sub {
@@ -159,6 +142,7 @@ post '/slots/{slot:[^/]+}/ads' => sub {
         'advertiser'  => $advertiser_id,
         'destination' => $c->req->param('destination'),
         'impressions' => 0,
+        'clicks'      => 0,
     );
 
     open my $in, $asset->path or do {
@@ -291,21 +275,23 @@ get '/slots/{slot:[^/]+}/ads/{id:[0-9]+}/redirect' => sub {
     my $slot = $c->args->{slot};
     my $id   = $c->args->{id};
 
+    my $key = $self->ad_key($slot, $id);
     my $ad = $self->get_ad($c, $slot, $id);
 
-   unless ( $ad ) {
+    unless ( $ad ) {
         $c->res->status(404);
         $c->res->content_type('application/json');
         $c->res->body(JSON->new->encode({ error => 'Not Found' }));
         return $c->res;
     }
 
-    open my $out , '>>', $self->log_path($ad->{advertiser}) or do {
-        $c->halt(500);
-    };
-    flock $out, LOCK_EX;
-    print $out join("\t", $ad->{id}, $c->req->cookies->{isuad}, $c->req->env->{'HTTP_USER_AGENT'} . "\n");
-    close $out;
+    $self->redis->hincrby($key, 'clicks', 1);
+    $self->redis->hincrby("$key:agent", $c->req->env->{'HTTP_USER_AGENT'} || 'unknown', 1);
+    my $user = $self->decode_user_key($c->req->cookies->{isuad});
+    $self->redis->hincrby("$key:gender", $user->{gender} || 'unknown', 1);
+    my $generation = 'unknown';
+    $generation = int($user->{age}/10) if $user->{age};
+    $self->redis->hincrby("$key:generation", $generation, 1);
 
     $c->redirect($ad->{destination});
 };
@@ -326,13 +312,8 @@ get '/me/report' => sub {
         my %ad = $self->redis->hgetall($ad_key);
         next unless %ad;
         $ad{impressions} = int($ad{impressions});
-        $report->{$ad{id}} = { ad => \%ad, clicks => 0, impressions => $ad{'impressions'} };
-    }
-
-    my $logs = $self->get_log($advertiser_id);
-
-    for my $ad_id ( keys %$logs ) {
-        $report->{$ad_id}->{clicks} = scalar @{$logs->{$ad_id}};
+        my $clicks = int(delete $ad{clicks});
+        $report->{$ad{id}} = { ad => \%ad, clicks => $clicks, impressions => $ad{'impressions'} };
     }
 
     $c->render_json($report);
@@ -353,39 +334,13 @@ get '/me/final_report' => sub {
         my %ad = $self->redis->hgetall($ad_key);
         next unless %ad;
         $ad{impressions} = int($ad{impressions});
-        $reports->{$ad{id}} = { ad => \%ad, clicks => 0, impressions => int($ad{'impressions'}) };
-    }
-
-    my $logs = $self->get_log($advertiser_id);
-
-    for my $ad_id ( keys %$reports ) {
-        my $report = $reports->{$ad_id};
-        my $log    = $logs->{$ad_id} || [];
-
-        $report->{clicks} = scalar @$log;
-
-        my $breakdown = {};
-
-        $breakdown->{gender}      = {};
-        $breakdown->{agents}      = {};
-        $breakdown->{generations} = {};
-
-        for my $row ( @$log ) {
-            my $gender = $row->{gender} || 'unknown';
-            $breakdown->{gender}->{$gender}++;
-
-            my $agent = $row->{agent} || 'unknown';
-            $breakdown->{agents}->{"$agent"}++;
-
-            my $generation = 'unknown';
-            if ( $row->{age} ) {
-                $generation = int($row->{age} / 10 );
-            }
-            $breakdown->{generations}->{$generation}++;
+        my $clicks = int(delete $ad{clicks});
+        $reports->{$ad{id}} = { ad => \%ad, clicks => $clicks, impressions => int($ad{'impressions'}) };
+        $reports->{$ad{id}}->{breakdown} = {
+            gender => $self->value2int($self->redis->hgetall("$ad_key:gender")),
+            agents => $self->value2int($self->redis->hgetall("$ad_key:agent")),
+            generations => $self->value2int($self->redis->hgetall("$ad_key:generation")),
         };
-
-
-        $report->{breakdown} = $breakdown;
     }
 
     $c->render_json($reports);
