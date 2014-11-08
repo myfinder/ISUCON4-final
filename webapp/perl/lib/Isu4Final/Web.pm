@@ -16,7 +16,7 @@ my $config = {
 #        isu18a => '203.104.111.152',
 #        isu18b => '203.104.111.153',
 #        isu18c => '203.104.111.154',
-        isu18a => '10.11.54.152',
+#        isu18a => '10.11.54.152',
         isu18b => '10.11.54.153',
         isu18c => '10.11.54.154',
     },
@@ -56,7 +56,7 @@ sub redis {
 }
 my $redis_nr;
 sub redis_nr {
-    $redis_nr ||= Redis->new(server => $config->{redis_server}, noreply => 1);
+    $redis_nr ||= Redis::Jet->new(server => $config->{redis_server}, noreply => 1);
     return $redis_nr;
 }
 
@@ -82,7 +82,7 @@ sub slot_key {
 
 sub next_ad_id {
     my $self = shift;
-    $self->redis_nr->command('incr', 'isu4:ad-next');
+    $self->redis->command('incr', 'isu4:ad-next');
 }
 
 sub next_ad {
