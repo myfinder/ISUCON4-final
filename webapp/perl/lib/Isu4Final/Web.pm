@@ -344,6 +344,8 @@ get '/me/final_report' => sub {
 post '/initialize' => sub {
     my ($self, $c) = @_;
 
+    my $no_syclic = $c->req->param('no_syclic');
+
     my @keys = $self->redis->keys('isu4:*');
 
     for my $key ( @keys ) {
@@ -358,10 +360,12 @@ post '/initialize' => sub {
         unlink $file;
     }
 
-    my $self_host = hostname;
-    for my $host (grep { $self_host ne $_ } keys %{$config->{map_host2ip}}) {
-        my $url = 'http://' . $config->{map_host2ip}{$host} . '/initialize';
-        HTTP::Tiny->new->get($host);
+    unless ($no_syclic) {
+        my $self_host = hostname;
+        for my $host (grep { $self_host ne $_ } keys %{$config->{map_host2ip}}) {
+            my $url = 'http://' . $config->{map_host2ip}{$host} . '/initialize?no_syclic=1';
+            HTTP::Tiny->new->get($host);
+        }
     }
 
     $c->res->content_type('text/plain');
