@@ -2,3 +2,4 @@ requires "vendor/Kossy-0.39.tar.gz";
 requires "Redis";
 requires "vendor/Redis-Jet-0.02.tar.gz";
 requires "Starman";
+requires "Starlet";

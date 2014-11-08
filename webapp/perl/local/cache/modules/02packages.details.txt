@@ -4,8 +4,8 @@ Description:  Package names found in cpanfile.snapshot
 Columns:      package name, version, path
 Intended-For: Automated fetch routines, namespace documentation.
 Written-By:   Carton v1.0.12
-Line-Count:   405
-Last-Updated: Sat Nov  8 10:12:33 2014
+Line-Count:   396
+Last-Updated: Sat Nov  8 16:47:07 2014
 
 Apache::LogFormat::Compiler            0.32  K/KA/KAZEBURO/Apache-LogFormat-Compiler-0.32.tar.gz
 CGI                                    4.09  L/LE/LEEJO/CGI-4.09.tar.gz
@@ -63,29 +63,20 @@ HTTP::Body::OctetStream                1.19  G/GE/GETTY/HTTP-Body-1.19.tar.gz
 HTTP::Body::UrlEncoded                 1.19  G/GE/GETTY/HTTP-Body-1.19.tar.gz
 HTTP::Body::XForms                     1.19  G/GE/GETTY/HTTP-Body-1.19.tar.gz
 HTTP::Body::XFormsMultipart            1.19  G/GE/GETTY/HTTP-Body-1.19.tar.gz
-HTTP::Config                           6.00  G/GA/GAAS/HTTP-Message-6.06.tar.gz
 HTTP::Date                             6.02  G/GA/GAAS/HTTP-Date-6.02.tar.gz
 HTTP::Entity::Parser                   0.12  K/KA/KAZEBURO/HTTP-Entity-Parser-0.12.tar.gz
 HTTP::Entity::Parser::JSON            undef  K/KA/KAZEBURO/HTTP-Entity-Parser-0.12.tar.gz
 HTTP::Entity::Parser::MultiPart       undef  K/KA/KAZEBURO/HTTP-Entity-Parser-0.12.tar.gz
 HTTP::Entity::Parser::OctetStream      undef  K/KA/KAZEBURO/HTTP-Entity-Parser-0.12.tar.gz
 HTTP::Entity::Parser::UrlEncoded      undef  K/KA/KAZEBURO/HTTP-Entity-Parser-0.12.tar.gz
-HTTP::Headers                          6.05  G/GA/GAAS/HTTP-Message-6.06.tar.gz
-HTTP::Headers::Auth                    6.00  G/GA/GAAS/HTTP-Message-6.06.tar.gz
-HTTP::Headers::ETag                    6.00  G/GA/GAAS/HTTP-Message-6.06.tar.gz
 HTTP::Headers::Fast                    0.17  T/TO/TOKUHIROM/HTTP-Headers-Fast-0.17.tar.gz
-HTTP::Headers::Util                    6.03  G/GA/GAAS/HTTP-Message-6.06.tar.gz
-HTTP::Message                          6.06  G/GA/GAAS/HTTP-Message-6.06.tar.gz
+HTTP::Message                         undef  G/GA/GAAS/HTTP-Message-6.06.tar.gz
 HTTP::Message::PSGI                   undef  M/MI/MIYAGAWA/Plack-1.0033.tar.gz
 HTTP::MultiPartParser                  0.01  C/CH/CHANSEN/HTTP-MultiPartParser-0.01.tar.gz
 HTTP::Parser::XS                       0.16  K/KA/KAZUHO/HTTP-Parser-XS-0.16.tar.gz
 HTTP::Parser::XS::PP                  undef  K/KA/KAZUHO/HTTP-Parser-XS-0.16.tar.gz
-HTTP::Request                          6.00  G/GA/GAAS/HTTP-Message-6.06.tar.gz
-HTTP::Request::Common                  6.04  G/GA/GAAS/HTTP-Message-6.06.tar.gz
-HTTP::Response                         6.04  G/GA/GAAS/HTTP-Message-6.06.tar.gz
 HTTP::Server::PSGI                    undef  M/MI/MIYAGAWA/Plack-1.0033.tar.gz
 HTTP::Server::PSGI::Net::Server::PreFork      undef  M/MI/MIYAGAWA/Starman-0.4010.tar.gz
-HTTP::Status                           6.03  G/GA/GAAS/HTTP-Message-6.06.tar.gz
 Hash::MultiValue                       0.15  M/MI/MIYAGAWA/Hash-MultiValue-0.15.tar.gz
 IO::HTML                              1.001  C/CJ/CJM/IO-HTML-1.001.tar.gz
 IO::Socket::Timeout                    0.27  D/DA/DAMS/IO-Socket-Timeout-0.27.tar.gz
