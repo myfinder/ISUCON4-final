@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use utf8;
 use Kossy;
-use Redis;
+use Redis::Jet;
 use File::Slurp;
 use Sys::Hostname;
 use HTTP::Tiny;
@@ -50,7 +50,7 @@ sub assets_dir {
 
 my $redis;
 sub redis {
-    $redis ||= Redis->new(server => $config->{redis_server});
+    $redis ||= Redis::Jet->new(server => $config->{redis_server});
     return $redis;
 }
 
@@ -76,7 +76,7 @@ sub slot_key {
 
 sub next_ad_id {
     my $self = shift;
-    $self->redis->incr('isu4:ad-next');
+    $self->redis->command('incr', 'isu4:ad-next');
 }
 
 sub next_ad {
@@ -84,7 +84,7 @@ sub next_ad {
     my $slot = $c->args->{slot};
     my $key = $self->slot_key($slot);
 
-    my $id  = $self->redis->rpoplpush($key, $key);
+    my ($id, $err)  = $self->redis->command('rpoplpush', $key, $key);
     unless ( $id ) {
         return undef;
     }
@@ -94,7 +94,7 @@ sub next_ad {
         return $ad;
     }
     else {
-        $self->redis->lrem($key, 0, $id);
+        $self->redis->command('lrem', $key, 0, $id);
         $self->next_ad($c);
     }
 }
@@ -102,8 +102,11 @@ sub next_ad {
 sub get_ad {
     my ( $self, $c, $slot, $id ) = @_;
     my $key = $self->ad_key($slot, $id);
-    my %ad  = $self->redis->hgetall($key);
+    my ($val, $err)  = $self->redis->command('hgetall', $key);
 
+    return undef if $err;
+
+    my %ad = @$val;
     return undef if !%ad;
 
     $ad{impressions} = int($ad{impressions});
@@ -122,7 +125,9 @@ sub decode_user_key {
 }
 
 sub value2int {
-    my ($self, %hash) = @_;
+    my ($self, $val, $err) = @_;
+    return {} if $err;
+    my %hash = @$val;
 
     my $new_hash = {};
     while ( my ($key, $value) = each (%hash) ) {
@@ -160,7 +165,7 @@ post '/slots/{slot:[^/]+}/ads' => sub {
     my $asset_key  = $self->asset_key($slot, $id);
     my $asset_url  = sprintf 'http://%s/assets/%s', $asset_host, $asset_key;
 
-    $self->redis->hmset(
+    $self->redis->command('hmset',
         $key,
         'slot'        => $slot,
         'id'          => $id,
@@ -180,8 +185,8 @@ post '/slots/{slot:[^/]+}/ads' => sub {
 
     write_file $self->assets_dir . "/$asset_key", { binmode => ':raw' }, $content;
 
-    $self->redis->rpush($self->slot_key($slot), $id);
-    $self->redis->sadd($self->advertiser_key($advertiser_id), $key);
+    $self->redis->command('rpush', $self->slot_key($slot), $id);
+    $self->redis->command('sadd', $self->advertiser_key($advertiser_id), $key);
 
     $c->render_json($self->get_ad($c, $slot, $id));
 };
@@ -251,14 +256,14 @@ post '/slots/{slot:[^/]+}/ads/{id:[0-9]+}/count' => sub {
 
     my $key = $self->ad_key($slot, $id);
 
-    unless ( $self->redis->exists($key) ) {
+    unless ( $self->redis->command('exists', $key) ) {
         $c->res->status(404);
         $c->res->content_type('application/json');
         $c->res->body(JSON->new->encode({ error => 'Not Found' }));
         return $c->res;
     }
 
-    $self->redis->hincrby($key, 'impressions', 1);
+    $self->redis->command('hincrby', $key, 'impressions', 1);
 
     $c->res->status(204);
     return $c->res;
@@ -280,13 +285,13 @@ get '/slots/{slot:[^/]+}/ads/{id:[0-9]+}/redirect' => sub {
         return $c->res;
     }
 
-    $self->redis->hincrby($key, 'clicks', 1);
-    $self->redis->hincrby("$key:agent", $c->req->env->{'HTTP_USER_AGENT'} || 'unknown', 1);
+    $self->redis->command('hincrby', $key, 'clicks', 1);
+    $self->redis->command('hincrby', "$key:agent", $c->req->env->{'HTTP_USER_AGENT'} || 'unknown', 1);
     my $user = $self->decode_user_key($c->req->cookies->{isuad});
-    $self->redis->hincrby("$key:gender", $user->{gender} || 'unknown', 1);
+    $self->redis->command('hincrby', "$key:gender", $user->{gender} || 'unknown', 1);
     my $generation = 'unknown';
     $generation = int($user->{age}/10) if $user->{age};
-    $self->redis->hincrby("$key:generation", $generation, 1);
+    $self->redis->command('hincrby', "$key:generation", $generation, 1);
 
     $c->redirect($ad->{destination});
 };
@@ -300,11 +305,13 @@ get '/me/report' => sub {
         $c->halt(401);
     }
 
-    my $ad_keys = $self->redis->smembers( $self->advertiser_key($advertiser_id) );
+    my $ad_keys = $self->redis->command('smembers', $self->advertiser_key($advertiser_id) );
 
     my $report = {};
     for my $ad_key ( @$ad_keys ) {
-        my %ad = $self->redis->hgetall($ad_key);
+        my ($val, $err) = $self->redis->command('hgetall', $ad_key);
+        next if $err;
+        my %ad = @$val;
         next unless %ad;
         $ad{impressions} = int($ad{impressions});
         my $clicks = int(delete $ad{clicks});
@@ -324,17 +331,19 @@ get '/me/final_report' => sub {
     }
 
     my $reports = {};
-    my $ad_keys = $self->redis->smembers( $self->advertiser_key($advertiser_id) );
+    my $ad_keys = $self->redis->command('smembers', $self->advertiser_key($advertiser_id) );
     for my $ad_key ( @$ad_keys ) {
-        my %ad = $self->redis->hgetall($ad_key);
+        my ($val, $err) = $self->redis->command('hgetall', $ad_key);
+        next if $err;
+        my %ad = @$val;
         next unless %ad;
         $ad{impressions} = int($ad{impressions});
         my $clicks = int(delete $ad{clicks});
         $reports->{$ad{id}} = { ad => \%ad, clicks => $clicks, impressions => int($ad{'impressions'}) };
         $reports->{$ad{id}}->{breakdown} = {
-            gender => $self->value2int($self->redis->hgetall("$ad_key:gender")),
-            agents => $self->value2int($self->redis->hgetall("$ad_key:agent")),
-            generations => $self->value2int($self->redis->hgetall("$ad_key:generation")),
+            gender => $self->value2int($self->redis->command('hgetall', "$ad_key:gender")),
+            agents => $self->value2int($self->redis->command('hgetall', "$ad_key:agent")),
+            generations => $self->value2int($self->redis->command('hgetall', "$ad_key:generation")),
         };
     }
 
@@ -346,10 +355,10 @@ post '/initialize' => sub {
 
     my $no_syclic = $c->req->param('no_syclic');
 
-    my @keys = $self->redis->keys('isu4:*');
+    my $keys = $self->redis->command('keys', 'isu4:*');
 
-    for my $key ( @keys ) {
-        $self->redis->del($key);
+    for my $key ( @$keys ) {
+        $self->redis->command('del', $key);
     }
 
     for my $file ( glob($self->log_dir . '/*') ) {
