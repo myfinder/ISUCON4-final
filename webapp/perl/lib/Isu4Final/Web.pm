@@ -45,7 +45,7 @@ sub assets_dir {
 
 my $redis;
 sub redis {
-    $redis ||= Redis->new;
+    $redis ||= Redis->new(server => '10.11.54.152:6379');
     return $redis;
 }
 
