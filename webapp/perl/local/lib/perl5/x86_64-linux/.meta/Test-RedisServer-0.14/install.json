@@ -1,0 +1,1 @@
+{"target":"Test::RedisServer","dist":"Test-RedisServer-0.14","version":"0.14","name":"Test::RedisServer","pathname":"T/TY/TYPESTER/Test-RedisServer-0.14.tar.gz","provides":{"Test::RedisServer":{"file":"lib/Test/RedisServer.pm","version":"0.14"}}}

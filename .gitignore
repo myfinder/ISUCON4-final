@@ -12,3 +12,4 @@ redis/appendonly.aof
 redis/dump.rdb
 isuad-first-logs/
 webapp/perl/logs/
+.cpanm

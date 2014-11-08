@@ -337,16 +337,7 @@ DISTRIBUTIONS
   HTTP-Message-6.06
     pathname: G/GA/GAAS/HTTP-Message-6.06.tar.gz
     provides:
-      HTTP::Config 6.00
-      HTTP::Headers 6.05
-      HTTP::Headers::Auth 6.00
-      HTTP::Headers::ETag 6.00
-      HTTP::Headers::Util 6.03
-      HTTP::Message 6.06
-      HTTP::Request 6.00
-      HTTP::Request::Common 6.04
-      HTTP::Response 6.04
-      HTTP::Status 6.03
+      HTTP::Message undef
     requirements:
       Compress::Raw::Zlib 0
       Encode 2.21
