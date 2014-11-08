@@ -8,3 +8,5 @@ sample_creatives
 .gem
 .vim
 .lesshst
+redis/appendonly.aof
+redis/dump.rdb
